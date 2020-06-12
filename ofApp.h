@@ -44,23 +44,18 @@ public:
 	Box meshBounds(const ofMesh&);
 	void drawLanding(const Landing& landing);
 
-
-	ofImage sky;
-	ofSoundPlayer fire;
-	ofSoundPlayer descent;
-
+	// Cameras
 	ofEasyCam cam;
 	ofCamera top;
 	ofCamera viewCam;
 	ofCamera insideCam;
 	ofCamera* theCam;
+
+	// Model for terrain and etc
 	ofxAssimpModelLoader terrain, lander;
 	ofLight light;
 	Box boundingBox;
 	Box landerBounds;
-
-	bool bAltKeyDown;
-	bool bCtrlKeyDown;
 	bool bWireframe;
 	bool bDisplayPoints;
 
@@ -73,48 +68,67 @@ public:
 	bool bDownKeyDown;
 	bool bLeftKeyDown;
 	bool bRightKeyDown;
+	bool bAltKeyDown;
+	bool bCtrlKeyDown;
+	glm::vec3 mouseDownPos;
+	glm::vec3 mouseLastPos;
+	
 	float angle;
 
+	// Booleans for conditions that we will use in our code
 	bool bLanderLoaded = false;
 	bool bTerrainSelected;
 	bool bLanderSelected = false;
 	bool bInDrag = false;
 	bool bInsideCamMouse = false;
 	bool bLanded;
+	bool gameReset;
+	bool gameDone;
+	bool gameStart;
+	bool gameWon;
+	bool hideGui;
+
 
 	ofVec3f selectedPoint;
 	ofVec3f intersectPoint;
+
+	// GUI stuff
 	ofxPanel gui;
 	ofxIntSlider levels;
 	int prevValue;
-
-	glm::vec3 mouseDownPos;
-	glm::vec3 mouseLastPos;
-
+	ofxVec3Slider rimLightPost;
 
 	const float selectionRange = 4.0;
 
+	// Stuff for our kdTree/octTree
 	KdTree kdtree;
 	Octree octree;
 	ofSpherePrimitive sphere;
 
-
+	// Particle Stuff
 	Particle physParticle;
 	ParticleSystem sys;
 	ParticleEmitter exhaust;
 	ParticleEmitter* explosion;                    // Starts whenever bullet collides with enemy
 
+	// Physics stuff
 	ThrusterForce* verticalThruster;
 	ThrusterForce* xzThruster;
 	ofVec3f thrusterVerticalAcceleration = ofVec3f(0, 3.5, 0);
+	GravityForce* deadForce;
 
 	ofVec3f heading;
+
+	// Collision
 	vector<ofVec3f> points;
 	vector<TreeNode> hitBoxes;
+
+	// Altitude Stuff
 	Ray sensor;
 	TreeNode altitudeIntersect;
 	float altitude;
 
+	// Landing Area
 	vector<Landing> zones;
 
 	// textures
@@ -127,22 +141,20 @@ public:
 	ofVbo vbo1;
 	ofShader shader;
 
+	// Light
 	ofLight keyLight, fillLight, rimLight;
 
+	// Important info
 	float fuel;
 	float timeExploaded;
-	bool gameReset;
-	bool gameDone;
-	bool gameStart;
-	bool gameWon;
-	GravityForce* deadForce;
 
+	// Images/Sounds
 	ofImage startScreen;			// First screen we see
-	ofImage endScreen;				// Last screen we see before we can restart
-	ofImage winScreen;				// Last screen we see before we can restart
-
-	bool hideGui;
-	ofxVec3Slider rimLightPost;
+	ofImage endScreen;				// Last screen we see before we can restart (Lose)
+	ofImage winScreen;				// Last screen we see before we can restart (Win)
+	ofImage sky;
+	ofSoundPlayer fire;
+	ofSoundPlayer descent;
 
 };
 
