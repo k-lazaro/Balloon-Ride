@@ -123,6 +123,9 @@ void ofApp::setup(){
     points.push_back(ofVec3f(min.x, min.y, max.z));
     points.push_back(ofVec3f(max.x, min.y, min.z));
     points.push_back(ofVec3f(max.x, min.y, max.z));
+    sensor = Ray(Vector3(lander.getPosition().x, lander.getPosition().y, lander.getPosition().z), Vector3(0, -100, 0));
+    
+    
 
 
     
@@ -167,6 +170,13 @@ void ofApp::update() {
     points[1] = ofVec3f(min.x, min.y, max.z);
     points[2] = ofVec3f(max.x, min.y, min.z);
     points[3] = ofVec3f(max.x, min.y, max.z);
+    
+    // 
+    //sensor = Ray(Vector3(lander.getPosition().x, lander.getPosition().y, lander.getPosition().z), Vector3(0, -100, 0));
+    sensor = Ray(Vector3((max.x - min.x)/2 + min.x, min.y, (max.z - min.z)/2 + min.z), Vector3(0, -100, 0));
+    kdtree.intersect(sensor, kdtree.root, altitudeIntersect);
+    float topOfBox = altitudeIntersect.box.max().y();
+    altitude = lander.getPosition().y - topOfBox;
     
 
     // Tests for crashing
@@ -282,13 +292,6 @@ void ofApp::draw(){
     kdtree.draw(kdtree.root, levels, 0);
     
     
-    // DIAGNOSTIC FOR ROOT CHILD BOXES
-//    ofSetColor(ofColor::blue);
-//    drawBox(medianSplit[0]);
-//    ofSetColor(ofColor::red);
-//    drawBox(medianSplit[1]);
-    //
-    
     // Draw particle systems/emitter
     sys.draw();
     exhaust.draw();
@@ -309,7 +312,7 @@ void ofApp::draw(){
 
     ofDisableDepthTest();
     gui.draw();
-    
+    ofDrawBitmapString(altitude, ofPoint(10, 20));
 }
 
 // 

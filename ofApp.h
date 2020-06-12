@@ -88,7 +88,6 @@ class ofApp : public ofBaseApp{
 		const float selectionRange = 4.0;
     
         KdTree kdtree;
-        vector<TreeNode> hitBoxes;
         ofSpherePrimitive sphere;
     
     
@@ -102,5 +101,9 @@ class ofApp : public ofBaseApp{
     
         ofVec3f heading;
         vector<ofVec3f> points;
+        vector<TreeNode> hitBoxes;
+        Ray sensor;
+        TreeNode altitudeIntersect;
+        float altitude;
 };
 
