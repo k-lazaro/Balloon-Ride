@@ -105,26 +105,30 @@ void ofApp::setup(){
     
     // load lander model
     //
-    if (lander.loadModel("geo/hot_air_baloon_4.obj")) {
+    if (lander.loadModel("geo/lander.obj")) {
         lander.setScaleNormalization(false);
         //lander.setScale(.5, .5, .5);
         //    lander.setRotation(0, -180, 1, 0, 0);
-        lander.setPosition(0, 3, 0);
+        lander.setPosition(0, 0, 0);
 
         bLanderLoaded = true;
     }
     else {
-        cout << "Error: Can't load model" << "geo/hot_air_baloon_4.obj" << endl;
+        cout << "Error: Can't load model" << "geo/lander.obj" << endl;
         ofExit(0);
     }
+    ofVec3f min = lander.getSceneMin() + lander.getPosition();
+    ofVec3f max = lander.getSceneMax() + lander.getPosition();
+    points.push_back(ofVec3f(min.x, min.y, min.z));
+    points.push_back(ofVec3f(min.x, min.y, max.z));
+    points.push_back(ofVec3f(max.x, min.y, min.z));
+    points.push_back(ofVec3f(max.x, min.y, max.z));
+
 
     
     // create KdTree for terrain
-    //
-   // timeStartedForTreeBuild = ofGetElapsedTimeMillis();
     kdtree.create(terrain.getMesh(0), 40);                      // 40 Levels for moon, 20 for mars
-    //timeEndedForTreeBuild = ofGetElapsedTimeMillis();
-    //cout << "Time to build tree for Moon at 20 levels: " << timeEndedForTreeBuild - timeStartedForTreeBuild << " milliseconds" << endl;
+
     
     // gui setup
     gui.setup();
@@ -135,18 +139,6 @@ void ofApp::setup(){
     //sphere.setRadius(.3);                                         // .3 for Mars
     
     
-//    // TESTING FOR VERTICES SORTING
-//    for (int i = 0; i < kdtree.root.points.size(); i++) {
-//        sort.push_back(kdtree.mesh.getVertex(kdtree.root.points[i]));
-//    }
-//    kdtree.sortVertices(0, sort);      // Sort in x
-//    //sortVertices(1, sort);      // Sort in y
-//    kdtree.sortVertices(2, sort);      // Sort in z
-//    for (int j = 0; j < sort.size(); j++) {
-//        cout << j << ": " << sort[j] << endl;
-//    }
-//    kdtree.subDivideMedianInZ(kdtree.root.box, sort.at(sort.size()/2).z, medianSplit);
-//    cout << sort.at(sort.size()/2).z << endl;
     
 }
 
@@ -154,6 +146,7 @@ void ofApp::setup(){
 // incrementally update scene (animation)
 //
 void ofApp::update() {
+    
     // If 'A' or 'D' is pressed, rotate heading vector and lander model
     //
     if (bAKeyDown == true) {
@@ -167,6 +160,22 @@ void ofApp::update() {
     lander.setRotation(0, angle, 0, 1, 0);
     lander.setPosition(sys.particles[0].position.x, sys.particles[0].position.y, sys.particles[0].position.z);          // Set position to follow particle
     
+    // Updates bottom contact points
+    ofVec3f min = lander.getSceneMin() + lander.getPosition();
+    ofVec3f max = lander.getSceneMax() + lander.getPosition();
+    points[0] = ofVec3f(min.x, min.y, min.z);
+    points[1] = ofVec3f(min.x, min.y, max.z);
+    points[2] = ofVec3f(max.x, min.y, min.z);
+    points[3] = ofVec3f(max.x, min.y, max.z);
+    
+
+    // Tests for crashing
+    hitBoxes.clear();
+    for (int i = 0; i < points.size(); i++) {
+        TreeNode hitBox;            // Change so that size of box is small enough
+        kdtree.pointIntersect(points[i], kdtree.root, hitBox);
+        hitBoxes.push_back(hitBox);
+    }
     
     // Condition checks for button presses
     //
@@ -263,16 +272,6 @@ void ofApp::draw(){
 		terrain.drawVertices();
 	}
 
-	// highlight selected point (draw sphere around selected point)
-	//
-    // FINAL IMPLEMENTATION
-    if (bPointSelected) {
-       ofSetColor(ofColor::red);
-        glm::vec3 vertex = kdtree.mesh.getVertex(nodeSelected.points[0]);
-        sphere.setPosition(vertex.x, vertex.y, vertex.z);
-        sphere.draw();
-        ofSetColor(ofColor::white);
-    }
 	
 	ofNoFill();
 	ofSetColor(ofColor::white);
@@ -293,6 +292,18 @@ void ofApp::draw(){
     // Draw particle systems/emitter
     sys.draw();
     exhaust.draw();
+    
+    // Draw bottom contact points
+    ofSetColor(ofColor::red);
+    ofDrawSphere(points[0].x, points[0].y, points[0].z, 0.3);
+    ofDrawSphere(points[1].x, points[1].y, points[1].z, 0.3);
+    ofDrawSphere(points[2].x, points[2].y, points[2].z, 0.3);
+    ofDrawSphere(points[3].x, points[3].y, points[3].z, 0.3);
+    for (int i = 0; i < hitBoxes.size(); i++) {
+        drawBox(hitBoxes[i].box);
+    }
+    ofSetColor(ofColor::white);
+
     
 	theCam->end();
 
@@ -370,6 +381,18 @@ void ofApp::keyPressed(int key) {
     case 's':     // spacefraft thrust DOWN
 //        savePicture();
         bSKeyDown = true;
+        break;
+    case OF_KEY_UP:    // move forward
+        bUpKeyDown = true;
+        break;
+    case OF_KEY_DOWN:   // move backward
+        bDownKeyDown = true;
+        break;
+    case OF_KEY_LEFT:   // move left
+        bLeftKeyDown = true;
+        break;
+    case OF_KEY_RIGHT:   // move right
+        bRightKeyDown = true;
         break;
 	case OF_KEY_ALT:
 		cam.enableMouseInput();
@@ -464,45 +487,13 @@ void ofApp::mousePressed(int x, int y, int button) {
 	//
 	if (cam.getMouseInputEnabled()) return;
     
-    glm::vec3 p = theCam->screenToWorld(glm::vec3(mouseX, mouseY, 0));
-    glm::vec3 rayDir = glm::normalize(p - theCam->getPosition());
     
-    // FINAL IMPLEMENTATION
-    mouseRay = Ray(Vector3(p.x, p.y, p.z) , Vector3(rayDir.x, rayDir.y, rayDir.z));         // Used for mouse/terrain interaction
-    bool intersection = kdtree.intersect(mouseRay, kdtree.root, nodeSelected);                                  // Returns node that is selected
-    
-//    if (intersection) {
-//        timeEndedForSelection = ofGetElapsedTimeMicros();
-//        cout << "Time for selection: " << timeEndedForSelection - timeStartedForSelection << " microseconds" << endl;
-//    }
-    
-    if (nodeSelected.box.intersect(mouseRay, 0, 1000)) {
-        bPointSelected = true;
-    }
-
-    
-    // DEBUG FOR RAY/MOUSE
-//    if (kdtree.root.children[1].children[1].box.intersect(mouseRay, 0, 1000)) {
-//        bLanderSelected = true;             // Repurpose landerselected
-//    }
     
     // Compute bounds
     //
     glm::vec3 min = lander.getSceneMin() + lander.getPosition();
     glm::vec3 max = lander.getSceneMax() + lander.getPosition();
     Box bounds = Box(Vector3(min.x, min.y, min.z), Vector3(max.x, max.y, max.z));
-
-    // Test interaction with ray
-    // bool intersect(const Ray &, float t0, float t1) const;
-    if (bounds.intersect(Ray(Vector3(p.x, p.y, p.z), Vector3(rayDir.x, rayDir.y, rayDir.z)), 0, 1000)) {
-        bLanderSelected = true;
-        mouseDownPos = getMousePointOnPlane(lander.getPosition(), cam.getZAxis());
-        mouseLastPos = mouseDownPos;
-        bInDrag = true;
-    }
-    else {
-        bLanderSelected = false;
-    }
     
 
 }
@@ -553,14 +544,6 @@ void ofApp::mouseDragged(int x, int y, int button) {
     //
     if (cam.getMouseInputEnabled()) return;
     
-        
-    glm::vec3 p = theCam->screenToWorld(glm::vec3(mouseX, mouseY, 0));
-    glm::vec3 rayDir = glm::normalize(p - theCam->getPosition());
-        
-    // ALLOWS FOR DRAGGING OF MOUSE
-    mouseRay = Ray(Vector3(p.x, p.y, p.z) , Vector3(rayDir.x, rayDir.y, rayDir.z));         // Used for mouse/terrain interaction
-    kdtree.intersect(mouseRay, kdtree.root, nodeSelected);                                  // Returns node that is selected
-
     
     if (bInDrag) {
         glm::vec3 landerPos = lander.getPosition();
@@ -580,7 +563,6 @@ void ofApp::mouseDragged(int x, int y, int button) {
 void ofApp::mouseReleased(int x, int y, int button) {
     bInDrag = false;
     bLanderSelected = false;
-    bPointSelected = false;
 }
 
 
