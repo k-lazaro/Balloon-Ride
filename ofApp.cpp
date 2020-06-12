@@ -3,23 +3,8 @@
 //
 //  CS134 - Game Development
 //
-//  Project 2 - 3D Spatial Data Structures
+//  Final
 // 
-//  Demonstration of a KdTree and its interaction with the mouse.
-//  The KdTree can be either divided into equal-sized boxes or
-//  into balanced boxes by obtaining the median in each sorted
-//  vertices from its axis.
-//
-//  To change from Moon to Mars:
-//  1. Comment line 70 and uncomment line 71 in ofApp.cpp
-//  2. Comment line 88 and uncomment line 89 in ofApp.cpp (Changes radius of sphere drawn)
-//  3. Comment lines 335-338 and uncomment lines 347-350 in KdTree.cpp
-//
-//  To change from equal divided boxes to balanced split boxes:
-//  - Comment line 210 and uncomment line 211 in KdTree.cpp
-//
-//  To change amount of levels for KdTree to build:
-//  - Change line 79, 2nd argument in ofApp.cpp
 //
 //
 //  Kevin Smith   10-20-19
@@ -41,9 +26,10 @@
 //
 void ofApp::setup() {
 
-    fuel = 5000000;
-    gameDone = false;
-    gameStart = false;
+    fuel = 50000;
+    //gameDone = false;
+    //gameStart = false;
+    hideGui = true;
 
     bWireframe = false;
     bDisplayPoints = false;
@@ -53,8 +39,23 @@ void ofApp::setup() {
     bTerrainSelected = true;
     //	ofSetWindowShape(1024, 768);
 
+    ofEnableLighting();
+
+    rimLight.setup();
+    rimLight.enable();
+    rimLight.setSpotlight();
+    rimLight.setScale(.05);
+    rimLight.setSpotlightCutOff(30);
+    rimLight.setAttenuation(.2, .001, .001);
+    rimLight.setAmbientColor(ofFloatColor(255, 255, 255));
+    rimLight.setDiffuseColor(ofFloatColor(255, 255, 255));
+    rimLight.setSpecularColor(ofFloatColor(255, 255, 255));
+    rimLight.rotate(180, ofVec3f(0, 1, 0));
+    rimLight.setPosition(rimLightPost);
+
     cam.setDistance(10);
     cam.setNearClip(.1);
+    cam.setPosition(3, 3, 3);
     cam.setFov(65.5);   // approx equivalent to 28mm in 35mm format
     ofSetVerticalSync(true);
     cam.disableMouseInput();
@@ -62,7 +63,7 @@ void ofApp::setup() {
 
 
     // Cameras set up
-    top.setPosition(0, 25, 0);
+    top.setPosition(0, 200, 0);
     top.lookAt(glm::vec3(0, 0, 0));
     top.setNearClip(.1);
     top.setFov(65.5);   // approx equivalent to 28mm in 35mm format
@@ -74,7 +75,7 @@ void ofApp::setup() {
 
     // set up physics particle
     //
-    physParticle.position = lander.getPosition();   // Starts at position of lander
+    physParticle.position = ofVec3f(0, 30, 0);   // Starts at position of lander
     physParticle.radius = 0;
     physParticle.lifespan = 100000;
 
@@ -101,7 +102,6 @@ void ofApp::setup() {
     sys.addForce(new TurbulenceForce(ofVec3f(0, 1, 0), ofVec3f(0, 5, 0)));  // Add forces
     sys.addForce(new GravityForce(ofVec3f(0, -3, 0)));
     deadForce = new GravityForce(ofVec3f(0, 0, 0));
-    sys.addForce(deadForce);
     verticalThruster = new ThrusterForce(ofVec3f(0, 0, 0));
     sys.addForce(verticalThruster);                     // Separate forces for veritcal and xz plane
     xzThruster = new ThrusterForce(ofVec3f(0, 0, 0));
@@ -113,7 +113,7 @@ void ofApp::setup() {
 
     // Exhaust particle emitter used when thruster is activated
     //
-    exhaust.setPosition(lander.getPosition() + ofVec3f(-.4, 4.5, 0));
+    exhaust.setPosition(lander.getPosition());
     exhaust.setEmitterType(DiscEmitter);
     exhaust.setVelocity(ofVec3f(0, 3, 0));
     exhaust.setParticleRadius(0.02);
@@ -121,7 +121,7 @@ void ofApp::setup() {
     exhaust.setLifespan(0.3);
     exhaust.setRate(0);
     exhaust.setGroupSize(10);
-    exhaust.particleColor = ofColor::red;
+    exhaust.particleColor = ofColor::yellow;
     exhaust.start();
 
     explosion = new ParticleEmitter(new ParticleSystem());
@@ -131,7 +131,7 @@ void ofApp::setup() {
     explosion->setEmitterType(RadialEmitter);
     explosion->setGroupSize(20);
 
-    theCam = &cam;
+    theCam = &insideCam;
 
     // setup rudimentary lighting 
     //
@@ -180,48 +180,11 @@ void ofApp::setup() {
     // gui setup
     gui.setup();
     gui.add(levels.setup("Levels", 2, 2, 20));
+    gui.add(rimLightPost.setup("rimLightPost", ofVec3f(0, 5, -7), ofVec3f(-10, -10, -10), ofVec3f(10, 10, 10)));
     prevValue = levels;
 
     sphere.setRadius(7.0);                                      // 7 for Moon
     //sphere.setRadius(.3);                                         // .3 for Mars
-
-    ofEnableLighting();
-    // Setup 3 - Light System
-    // 
-    keyLight.setup();
-    keyLight.enable();
-    keyLight.setAreaLight(1, 1);
-    keyLight.setAmbientColor(ofFloatColor(0.1, 0.1, 0.1));
-    keyLight.setDiffuseColor(ofFloatColor(1, 1, 1));
-    keyLight.setSpecularColor(ofFloatColor(1, 1, 1));
-    keyLight.rotate(45, ofVec3f(0, 1, 0));
-    keyLight.rotate(-45, ofVec3f(1, 0, 0));
-    keyLight.setPosition(5, 5, 5);
-
-    fillLight.setup();
-	fillLight.enable();
-	fillLight.setSpotlight();
-	fillLight.setScale(.05);
-	fillLight.setSpotlightCutOff(15);
-	fillLight.setAttenuation(2, .001, .001);
-	fillLight.setAmbientColor(ofFloatColor(0.1, 0.1, 0.1));
-	fillLight.setDiffuseColor(ofFloatColor(1, 1, 1));
-	fillLight.setSpecularColor(ofFloatColor(1, 1, 1));
-	fillLight.rotate(-10, ofVec3f(1, 0, 0));
-	fillLight.rotate(-45, ofVec3f(0, 1, 0));
-	fillLight.setPosition(-5, 5, 5);
-
-    rimLight.setup();
-    rimLight.enable();
-    rimLight.setSpotlight();
-    rimLight.setScale(.05);
-    rimLight.setSpotlightCutOff(30);
-    rimLight.setAttenuation(.2, .001, .001);
-    rimLight.setAmbientColor(ofFloatColor(0.1, 0.1, 0.1));
-    rimLight.setDiffuseColor(ofFloatColor(1, 1, 1));
-    rimLight.setSpecularColor(ofFloatColor(1, 1, 1));
-    rimLight.rotate(heading.x, ofVec3f(0, 1, 0));
-    rimLight.setPosition(lander.getPosition());
 
 
     // Background load
@@ -302,8 +265,17 @@ void ofApp::checkCollisions() {
 //
 void ofApp::update() {
 
+    if (zones[0].landed == true && zones[1].landed == true && zones[2].landed == true)
+    {
+        gameWon = true;
+    }
+
+    if (!bLanded && timeExploaded > 0) {
+        if (ofGetElapsedTimeMillis() - timeExploaded > 3500)
+            gameDone = true;
+    }
+
     ofSeedRandom();
-    rimLight.setPosition(lander.getPosition());
     fuel--;
 
     if (fuel <= 0)
@@ -324,12 +296,10 @@ void ofApp::update() {
     if (bAKeyDown == true) {
         angle += 0.5;
         heading.rotate(0.5, ofVec3f(0, 1, 0));
-        rimLight.rotate(heading.x, ofVec3f(0, 1, 0));
     }
     else if (bDKeyDown == true) {
         angle -= 0.5;
         heading.rotate(-0.5, ofVec3f(0, 1, 0));
-        rimLight.rotate(-heading.x, ofVec3f(0, 1, 0));
     }
     lander.setRotation(0, angle, 0, 1, 0);
     lander.setPosition(sys.particles[0].position.x, sys.particles[0].position.y, sys.particles[0].position.z);          // Set position to follow particle
@@ -349,16 +319,23 @@ void ofApp::update() {
     //insideCam.lookAt(glm::vec3(heading.x * 100, sys.particles[0].position.y + ((max - min)/2).y, heading.z * 100));
 
     if (theCam == &insideCam) {
-        // Center of camera is at windowWidth/2 and windowHeight/2
-        if (mouseX > 550 && mouseX < 700 && mouseY > 300 && mouseY < 500) {
-            insideCam.lookAt(theCam->screenToWorld(glm::vec3(ofGetWindowWidth() / 2, ofGetWindowHeight() / 2, 0)));
+        if (bInsideCamMouse) {          // Control inside cam with mouse
+            // Center of camera is at windowWidth/2 and windowHeight/2
+            if (mouseX > 550 && mouseX < 700 && mouseY > 300 && mouseY < 500) {
+                insideCam.lookAt(theCam->screenToWorld(glm::vec3(ofGetWindowWidth() / 2, ofGetWindowHeight() / 2, 0)));
+            }
+            else {
+                ofVec3f centerToMouse = ofVec3f(mouseX - ofGetWindowWidth() / 2, mouseY - ofGetWindowHeight() / 2, 0);     // Vector from center to mouse
+                centerToMouse = centerToMouse.getNormalized() * 4;          // Normalize and multiply by constant
+                insideCam.lookAt(theCam->screenToWorld(glm::vec3(ofGetWindowWidth() / 2 + centerToMouse.x, ofGetWindowHeight() / 2 + centerToMouse.y, 0)));
+            }
         }
-        else {
-            ofVec3f centerToMouse = ofVec3f(mouseX - ofGetWindowWidth() / 2, mouseY - ofGetWindowHeight() / 2, 0);     // Vector from center to mouse
-            centerToMouse = centerToMouse.getNormalized() * 4;          // Normalize and multiply by constant
-            insideCam.lookAt(theCam->screenToWorld(glm::vec3(ofGetWindowWidth() / 2 + centerToMouse.x, ofGetWindowHeight() / 2 + centerToMouse.y, 0)));
+        else {                      // Inside cam follows heading vector
+            insideCam.lookAt(glm::vec3(heading.x * 100, sys.particles[0].position.y + ((max - min) / 4).y, heading.z * 100));
         }
+
     }
+
     //cout << "(" << mouseX << ", " << mouseY << ")" << endl;
     viewCam.lookAt(sys.particles[0].position);
 
@@ -382,14 +359,17 @@ void ofApp::update() {
         if (hitBox.points.size() != 0 && sys.particles[0].velocity.y < 0) {                // Checks if added TreeNode is not null
             hitBoxes.push_back(hitBox);
             for (int j = 0; j < zones.size(); j++) {
-                bool in = zones[j].checkInside(lander.getPosition());
-                if (in)
-                {
-                    fuel = 50000;
-                }
+                bool l = zones[j].checkInside(lander.getPosition());                  // Check if zones are touched
+                bLanded = l || bLanded;
             }
-            explosion->setPosition(lander.getPosition());
-            explosion->start();
+            if (bLanded) {
+                fuel = fuel + 50000;
+            }
+            if (!bLanded) {
+                explosion->setPosition(lander.getPosition());
+                explosion->start();
+                timeExploaded = ofGetElapsedTimeMillis();
+            }
         }
     }
 
@@ -461,17 +441,13 @@ void ofApp::update() {
         }
     }
 
-    if (zones[0].landed == true && zones[1].landed == true && zones[2].landed == true)
-    {
-        gameWon = true;
-    }
-
 }
 //--------------------------------------------------------------
 void ofApp::draw() {
 
     loadVbo();
     sky.draw(0, 0, 0);
+
 
     ofEnableDepthTest();
     theCam->begin();
@@ -594,7 +570,11 @@ void ofApp::draw() {
     theCam->end();
 
     ofDisableDepthTest();
-    gui.draw();
+
+    if (!hideGui) {
+        gui.draw();
+    }
+
     ofDrawBitmapString(altitude, ofPoint(10, 20));
     ofDrawBitmapString(fuel, ofPoint(30, 50));
     if (!gameStart)	// Drawing the start screen
@@ -659,6 +639,8 @@ void ofApp::keyPressed(int key) {
     case 'h':
         sys.particles[0].position = ofVec3f(0, 0, 0);
         fuel = 50000;
+        timeExploaded = 0;
+        bLanded = false;
         deadForce->set(ofVec3f(0, 0, 0));
         gameDone = false;
         gameWon = false;
@@ -674,6 +656,7 @@ void ofApp::keyPressed(int key) {
         setCameraTarget();
         break;
     case 'u':
+        hideGui = !hideGui;
         break;
     case 'v':
         togglePointsDisplay();
@@ -718,16 +701,21 @@ void ofApp::keyPressed(int key) {
     case OF_KEY_DEL:
         break;
     case OF_KEY_F1:
-        theCam = &cam;
+        theCam = &insideCam;
+        bInsideCamMouse = false;
         break;
     case OF_KEY_F2:
-        theCam = &top;
+        theCam = &insideCam;
+        bInsideCamMouse = true;
         break;
     case OF_KEY_F3:
-        theCam = &viewCam;
+        theCam = &top;
         break;
     case OF_KEY_F4:
-        theCam = &insideCam;
+        theCam = &viewCam;
+        break;
+    case OF_KEY_F5:
+        theCam = &cam;
         break;
     default:
         break;

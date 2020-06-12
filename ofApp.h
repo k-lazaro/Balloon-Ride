@@ -79,7 +79,8 @@ public:
 	bool bTerrainSelected;
 	bool bLanderSelected = false;
 	bool bInDrag = false;
-	bool bCrashed = false;
+	bool bInsideCamMouse = false;
+	bool bLanded;
 
 	ofVec3f selectedPoint;
 	ofVec3f intersectPoint;
@@ -129,7 +130,7 @@ public:
 	ofLight keyLight, fillLight, rimLight;
 
 	float fuel;
-	float pointsCaptured;
+	float timeExploaded;
 	bool gameReset;
 	bool gameDone;
 	bool gameStart;
@@ -140,8 +141,8 @@ public:
 	ofImage endScreen;				// Last screen we see before we can restart
 	ofImage winScreen;				// Last screen we see before we can restart
 
-	ofPlanePrimitive plane;
-	ofMaterial planeMaterial;
+	bool hideGui;
+	ofxVec3Slider rimLightPost;
 
 };
 
