@@ -48,6 +48,7 @@ void ofApp::setup(){
 	bLanderLoaded = false;
 	bTerrainSelected = true;
 //	ofSetWindowShape(1024, 768);
+    
 	cam.setDistance(10);
 	cam.setNearClip(.1);
 	cam.setFov(65.5);   // approx equivalent to 28mm in 35mm format
@@ -56,10 +57,16 @@ void ofApp::setup(){
 	ofEnableSmoothing();
 	
 
+    // Cameras set up
 	top.setPosition(0, 25, 0);
 	top.lookAt(glm::vec3(0, 0, 0));
 	top.setNearClip(.1);
 	top.setFov(65.5);   // approx equivalent to 28mm in 35mm format
+    
+    insideCam.setPosition(ofVec3f(0, 0, 0));
+    insideCam.lookAt(heading);
+    insideCam.setNearClip(.1);
+    insideCam.setFov(65.5);   // approx equivalent to 28mm in 35mm format
     
     // set up physics particle
     //
@@ -103,6 +110,12 @@ void ofApp::setup(){
 	terrain.setScaleNormalization(false);
 	boundingBox = meshBounds(terrain.getMesh(0));
     
+    // Set up "tracking" camera
+    viewCam.setPosition((boundingBox.max().x() - boundingBox.min().x())/2 + boundingBox.min().x(),
+                        boundingBox.max().y(), boundingBox.max().z());
+    viewCam.setNearClip(.1);
+    viewCam.setFov(65.5);   // approx equivalent to 28mm in 35mm format
+    
     // load lander model
     //
     if (lander.loadModel("geo/lander.obj")) {
@@ -126,9 +139,6 @@ void ofApp::setup(){
     sensor = Ray(Vector3(lander.getPosition().x, lander.getPosition().y, lander.getPosition().z), Vector3(0, -100, 0));
     
     
-
-
-    
     // create KdTree for terrain
     kdtree.create(terrain.getMesh(0), 40);                      // 40 Levels for moon, 20 for mars
 
@@ -141,7 +151,27 @@ void ofApp::setup(){
     sphere.setRadius(7.0);                                      // 7 for Moon
     //sphere.setRadius(.3);                                         // .3 for Mars
     
+    sky.load("images/tilesetOpenGameBackground.png");
+    sky.resize(ofGetWindowWidth(), ofGetWindowHeight());
     
+    fire.load("sounds/qubodupFireLoop.ogg");
+    descent.load("sounds/wind woosh loop.ogg");
+}
+
+void ofApp::checkCollisions() {
+    // only bother to check for descending particles.
+    //
+    ofVec3f vel = sys.particles[0].velocity; // velocity of particle
+    if (vel.y >= 0)
+    {
+        return;
+    }
+    else {
+        for (int i = 0; i < hitBoxes.size(); i++) {
+            ofVec3f norm = ofVec3f(0, 1, 0);
+            sys.addForce(new ImpulseForce(sys.particles[0].velocity, norm));
+        }
+    }
     
 }
 
@@ -162,6 +192,7 @@ void ofApp::update() {
     }
     lander.setRotation(0, angle, 0, 1, 0);
     lander.setPosition(sys.particles[0].position.x, sys.particles[0].position.y, sys.particles[0].position.z);          // Set position to follow particle
+
     
     // Updates bottom contact points
     ofVec3f min = lander.getSceneMin() + lander.getPosition();
@@ -171,7 +202,13 @@ void ofApp::update() {
     points[2] = ofVec3f(max.x, min.y, min.z);
     points[3] = ofVec3f(max.x, min.y, max.z);
     
-    // 
+    // Camera updates
+    insideCam.setPosition(sys.particles[0].position * 1.5);
+    insideCam.lookAt(glm::vec3(heading.x * 100, sys.particles[0].position.y * 1.5, heading.z * 100));
+    viewCam.lookAt(sys.particles[0].position);
+    
+    
+    // Altitude checking
     //sensor = Ray(Vector3(lander.getPosition().x, lander.getPosition().y, lander.getPosition().z), Vector3(0, -100, 0));
     sensor = Ray(Vector3((max.x - min.x)/2 + min.x, min.y, (max.z - min.z)/2 + min.z), Vector3(0, -100, 0));
     kdtree.intersect(sensor, kdtree.root, altitudeIntersect);
@@ -184,22 +221,33 @@ void ofApp::update() {
     for (int i = 0; i < points.size(); i++) {
         TreeNode hitBox;            // Change so that size of box is small enough
         kdtree.pointIntersect(points[i], kdtree.root, hitBox);
-        hitBoxes.push_back(hitBox);
+        if (hitBox.points.size() != 0 && sys.particles[0].velocity.y < 0) {                // Checks if added TreeNode is not null
+            hitBoxes.push_back(hitBox);
+        }
     }
+    
+    checkCollisions();
+    
     
     // Condition checks for button presses
     //
     if (bWKeyDown == true) {
         verticalThruster->set(thrusterVerticalAcceleration);    // Positive vertical
         exhaust.setRate(100);
+        if (!fire.isPlaying())
+            fire.play();
     }
     if (bSKeyDown == true) {
         verticalThruster->set(-thrusterVerticalAcceleration);   // Negative vertical
         exhaust.setRate(100);
+        if (!descent.isPlaying())
+            descent.play();
     }
     if (bWKeyDown == false && bSKeyDown == false) {
         verticalThruster->set(ofVec3f(0, 0, 0));                // No acceleration
         exhaust.setRate(0);
+        fire.stop();
+        descent.stop();
     }
     
     if (bUpKeyDown == true) {
@@ -231,21 +279,30 @@ void ofApp::update() {
     sys.update();
     exhaust.setPosition(lander.getPosition());
     exhaust.update();
+    
+    // Pop the impulse forces
+    if (hitBoxes.size() != 0) {
+        for (int j = 0; j < hitBoxes.size(); j++) {
+            sys.forces.pop_back();
+        }
+    }
 }
 //--------------------------------------------------------------
 void ofApp::draw(){
     
-	ofBackground(ofColor::black);
+	sky.draw(0, 0, 0);
 
     ofEnableDepthTest();
 	theCam->begin();
 
+    
+    
 	ofPushMatrix();
 	if (bWireframe) {                    // wireframe mode  (include axis)
 		ofDisableLighting();
 		ofSetColor(ofColor::slateGray);
 		terrain.drawWireframe();
-		if (bLanderLoaded) {
+		if (bLanderLoaded && theCam != &insideCam) {
 			lander.drawWireframe();
 			if (!bTerrainSelected) drawAxis(lander.getPosition());
 		}
@@ -255,7 +312,7 @@ void ofApp::draw(){
 		ofEnableLighting();              // shaded mode
 		terrain.drawFaces();
 
-		if (bLanderLoaded) {
+		if (bLanderLoaded && theCam != &insideCam) {
 			lander.drawFaces();
 			if (!bTerrainSelected) drawAxis(lander.getPosition());
 
@@ -281,6 +338,7 @@ void ofApp::draw(){
 		ofSetColor(ofColor::green);
 		terrain.drawVertices();
 	}
+    
 
 	
 	ofNoFill();
@@ -414,6 +472,12 @@ void ofApp::keyPressed(int key) {
 	case OF_KEY_F2:
 		theCam = &top;
 		break;
+    case OF_KEY_F3:
+        theCam = &viewCam;
+        break;
+    case OF_KEY_F4:
+        theCam = &insideCam;
+        break;
 	default:
 		break;
 	}

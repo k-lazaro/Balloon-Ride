@@ -20,6 +20,7 @@ class ofApp : public ofBaseApp{
 		void update();
 		void draw();
 
+        void checkCollisions();
 		void keyPressed(int key);
 		void keyReleased(int key);
 		void mouseMoved(int x, int y );
@@ -43,10 +44,14 @@ class ofApp : public ofBaseApp{
 		Box meshBounds(const ofMesh &);
     
 
-		
+        ofImage sky;
+        ofSoundPlayer fire;
+        ofSoundPlayer descent;
 
 		ofEasyCam cam;
 		ofCamera top;
+        ofCamera viewCam;
+        ofCamera insideCam;
 		ofCamera *theCam;
 		ofxAssimpModelLoader terrain, lander;
 		ofLight light;
