@@ -43,6 +43,7 @@ class ofApp : public ofBaseApp{
 		void setCameraTarget();
 		glm::vec3 getMousePointOnPlane(glm::vec3 planePt, glm::vec3 planeNorm);
 		void drawBox(const Box &box);
+		void loadVbo();
 		Box meshBounds(const ofMesh &);
     
 
@@ -116,5 +117,19 @@ class ofApp : public ofBaseApp{
         float altitude;
     
         vector<Landing> zones;
+
+		// textures
+		//
+		ofTexture  particleTex;
+
+		// shaders
+		//
+		ofVbo vbo;
+		ofShader shader;
+
+		ofLight keyLight, fillLight, rimLight;
+
+		float fuel;
+
 };
 

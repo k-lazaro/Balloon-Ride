@@ -41,6 +41,8 @@
 //
 void ofApp::setup(){
 
+    fuel = 3600;
+
 	bWireframe = false;
 	bDisplayPoints = false;
 	bAltKeyDown = false;
@@ -73,6 +75,25 @@ void ofApp::setup(){
     physParticle.position = lander.getPosition();   // Starts at position of lander
     physParticle.radius = 0;
     physParticle.lifespan = 100000;
+
+    // texture loading
+    //
+    ofDisableArbTex();     // disable rectangular textures
+
+    // load textures
+    //
+    if (!ofLoadImage(particleTex, "images/dot.png")) {
+        cout << "Particle Texture File: images/dot.png not found" << endl;
+        ofExit();
+    }
+
+    // load the shader
+    //
+    #ifdef TARGET_OPENGLES
+        shader.load("shaders_gles/shader");
+    #else
+        shader.load("shaders/shader");
+    #endif
     
     sys.add(physParticle);
     sys.addForce(new TurbulenceForce(ofVec3f(0, 1, 0), ofVec3f(0, 5, 0)));  // Add forces
@@ -88,15 +109,15 @@ void ofApp::setup(){
     
     // Exhaust particle emitter used when thruster is activated
     //
-    exhaust.setPosition(lander.getPosition());
+    exhaust.setPosition(lander.getPosition() + ofVec3f(-.4,4.5,0));
     exhaust.setEmitterType(DiscEmitter);
-    exhaust.setVelocity(ofVec3f(0, -3, 0));
+    exhaust.setVelocity(ofVec3f(0, 3, 0));
     exhaust.setParticleRadius(0.02);
     exhaust.radius = 0.25;
     exhaust.setLifespan(0.3);
     exhaust.setRate(0);
     exhaust.setGroupSize(10);
-    exhaust.particleColor = ofColor::yellow;
+    exhaust.particleColor = ofColor::red;
     exhaust.start();
     
     explosion = new ParticleEmitter(new ParticleSystem());
@@ -159,6 +180,32 @@ void ofApp::setup(){
     
     sphere.setRadius(7.0);                                      // 7 for Moon
     //sphere.setRadius(.3);                                         // .3 for Mars
+
+    ofEnableLighting();
+    // Setup 3 - Light System
+    // 
+    keyLight.setup();
+    keyLight.enable();
+    keyLight.setAreaLight(1, 1);
+    keyLight.setAmbientColor(ofFloatColor(0.1, 0.1, 0.1));
+    keyLight.setDiffuseColor(ofFloatColor(1, 1, 1));
+    keyLight.setSpecularColor(ofFloatColor(1, 1, 1));
+    keyLight.rotate(45, ofVec3f(0, 1, 0));
+    keyLight.rotate(-45, ofVec3f(1, 0, 0));
+    keyLight.setPosition(5, 5, 5);
+
+    rimLight.setup();
+    rimLight.enable();
+    rimLight.setSpotlight();
+    rimLight.setScale(.05);
+    rimLight.setSpotlightCutOff(30);
+    rimLight.setAttenuation(.2, .001, .001);
+    rimLight.setAmbientColor(ofFloatColor(0.1, 0.1, 0.1));
+    rimLight.setDiffuseColor(ofFloatColor(1, 1, 1));
+    rimLight.setSpecularColor(ofFloatColor(1, 1, 1));
+    rimLight.rotate(heading.x, ofVec3f(0, 1, 0));
+    rimLight.setPosition(lander.getPosition());
+
     
     // Background load
     sky.load("images/tilesetOpenGameBackground.png");
@@ -170,6 +217,28 @@ void ofApp::setup(){
     
     // Landing zones
     zones.push_back(Landing(-14.0, 21.0, 5.47, 14.0));
+    zones.push_back(Landing(-22.8, -46.5, -29.5, -33.5));
+    zones.push_back(Landing(-38.6, 67.2, -71.1, 75.7));
+
+}
+
+// load vertex buffer in preparation for rendering
+//
+void ofApp::loadVbo() {
+    if (exhaust.sys->particles.size() < 1) return;
+
+    vector<ofVec3f> sizes;
+    vector<ofVec3f> points;
+    for (int i = 0; i < exhaust.sys->particles.size(); i++) {
+        points.push_back(exhaust.sys->particles[i].position);
+        sizes.push_back(ofVec3f(5));
+    }
+    // upload the data to the vbo
+    //
+    int total = (int)points.size();
+    vbo.clear();
+    vbo.setVertexData(&points[0], total, GL_STATIC_DRAW);
+    vbo.setNormalData(&sizes[0], total, GL_STATIC_DRAW);
 }
 
 void ofApp::checkCollisions() {
@@ -194,15 +263,29 @@ void ofApp::checkCollisions() {
 //
 void ofApp::update() {
     
+    ofSeedRandom();
+    rimLight.setPosition(lander.getPosition());
+    fuel--;
+
+    if (fuel <= 0)
+    {
+        sys.addForce(new GravityForce(ofVec3f(0, -10, 0)));
+    }
+
+    //cout << "x: " << lander.getPosition().x << " z: "<< lander.getPosition().z << endl;
+
+    
     // If 'A' or 'D' is pressed, rotate heading vector and lander model
     //
     if (bAKeyDown == true) {
         angle += 0.5;
         heading.rotate(0.5, ofVec3f(0, 1, 0));
+        rimLight.rotate(heading.x, ofVec3f(0, 1, 0));
     }
     else if (bDKeyDown == true) {
         angle -= 0.5;
         heading.rotate(-0.5, ofVec3f(0, 1, 0));
+        rimLight.rotate(-heading.x, ofVec3f(0, 1, 0));
     }
     lander.setRotation(0, angle, 0, 1, 0);
     lander.setPosition(sys.particles[0].position.x, sys.particles[0].position.y, sys.particles[0].position.z);          // Set position to follow particle
@@ -255,12 +338,14 @@ void ofApp::update() {
         exhaust.setRate(100);
         if (!fire.isPlaying())
             fire.play();
+        fuel = fuel - 5;
     }
     if (bSKeyDown == true) {
         verticalThruster->set(-thrusterVerticalAcceleration);   // Negative vertical
         exhaust.setRate(100);
         if (!descent.isPlaying())
             descent.play();
+        fuel = fuel - 5;
     }
     if (bWKeyDown == false && bSKeyDown == false) {
         verticalThruster->set(ofVec3f(0, 0, 0));                // No acceleration
@@ -272,21 +357,25 @@ void ofApp::update() {
     if (bUpKeyDown == true) {
         xzThruster->set(ofVec3f(heading.x, 0, heading.z));      // Forward
         exhaust.setRate(100);
+        fuel = fuel - 5;
     }
     
     if (bDownKeyDown == true) {
         xzThruster->set(ofVec3f(-heading.x, 0, -heading.z));    // Backward
         exhaust.setRate(100);
+        fuel = fuel - 5;
     }
     
     if (bLeftKeyDown == true) {
         xzThruster->set(ofVec3f(heading.z, 0, -heading.x));     // Left
         exhaust.setRate(100);
+        fuel = fuel - 5;
     }
     
     if (bRightKeyDown == true) {
         xzThruster->set(ofVec3f(-heading.z, 0, heading.x));     // Right
         exhaust.setRate(100);
+        fuel = fuel - 5;
     }
     
     if (bUpKeyDown == false && bDownKeyDown == false && bLeftKeyDown == false && bRightKeyDown == false) {
@@ -296,7 +385,7 @@ void ofApp::update() {
     // Update particle systems/emitter
     //
     sys.update();
-    exhaust.setPosition(lander.getPosition());
+    exhaust.setPosition(lander.getPosition() + ofVec3f(-.4, 4.5, 0));
     exhaust.update();
     explosion->update();
     
@@ -310,12 +399,12 @@ void ofApp::update() {
 //--------------------------------------------------------------
 void ofApp::draw(){
     
+    loadVbo();
 	sky.draw(0, 0, 0);
 
     ofEnableDepthTest();
 	theCam->begin();
-
-    
+   
     
 	ofPushMatrix();
 	if (bWireframe) {                    // wireframe mode  (include axis)
@@ -373,8 +462,37 @@ void ofApp::draw(){
     
     // Draw particle systems/emitter
     sys.draw();
-    exhaust.draw();
     explosion->draw();
+
+    ofSetColor(255, 100, 90);
+
+    // this makes everything look glowy :)
+    //
+    ofEnableBlendMode(OF_BLENDMODE_ADD);
+    ofEnablePointSprites();
+
+
+    // begin drawing in the camera
+    //
+    shader.begin();
+
+    // draw particle emitter here..
+    //
+    particleTex.bind();
+    vbo.draw(GL_POINTS, 0, (int)exhaust.sys->particles.size());
+    particleTex.unbind();
+
+    //  end drawing in the camera
+    // 
+    shader.end();
+
+    ofDisablePointSprites();
+    ofDisableBlendMode();
+    ofEnableAlphaBlending();
+
+    // set back the depth mask
+    //
+    glDepthMask(GL_TRUE);
     
     // Draw bottom contact points
     ofSetColor(ofColor::red);
@@ -393,6 +511,7 @@ void ofApp::draw(){
     ofDisableDepthTest();
     gui.draw();
     ofDrawBitmapString(altitude, ofPoint(10, 20));
+    ofDrawBitmapString(fuel, ofPoint(30, 50));
 }
 
 // 
