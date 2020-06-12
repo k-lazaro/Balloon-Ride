@@ -125,11 +125,19 @@ class ofApp : public ofBaseApp{
 		// shaders
 		//
 		ofVbo vbo;
+		ofVbo vbo1;
 		ofShader shader;
 
 		ofLight keyLight, fillLight, rimLight;
 
 		float fuel;
+		bool gameReset;
+		bool gameDone;
+		bool gameStart;
+		GravityForce* deadForce;
+
+		ofImage startScreen;			// First screen we see
+		ofImage endScreen;				// Last screen we see before we can restart
 
 };
 

@@ -41,7 +41,9 @@
 //
 void ofApp::setup(){
 
-    fuel = 3600;
+    fuel = 50000;
+    gameDone = false;
+    gameStart = false;
 
 	bWireframe = false;
 	bDisplayPoints = false;
@@ -98,6 +100,8 @@ void ofApp::setup(){
     sys.add(physParticle);
     sys.addForce(new TurbulenceForce(ofVec3f(0, 1, 0), ofVec3f(0, 5, 0)));  // Add forces
     sys.addForce(new GravityForce(ofVec3f(0, -3, 0)));
+    deadForce = new GravityForce(ofVec3f(0, 0, 0));
+    sys.addForce(deadForce);
     verticalThruster = new ThrusterForce(ofVec3f(0, 0, 0));
     sys.addForce(verticalThruster);                     // Separate forces for veritcal and xz plane
     xzThruster = new ThrusterForce(ofVec3f(0, 0, 0));
@@ -125,7 +129,7 @@ void ofApp::setup(){
     explosion->setOneShot(true);
     explosion->fired = false;
     explosion->setEmitterType(RadialEmitter);
-    explosion->setGroupSize(2);
+    explosion->setGroupSize(20);
 
 	theCam = &cam;
 
@@ -133,7 +137,7 @@ void ofApp::setup(){
 	//
 	initLightingAndMaterials();
 
-	terrain.loadModel("geo/one.obj");
+	terrain.loadModel("geo/minecraft.obj");
     //terrain.loadModel("geo/mars-5k.obj");
 	terrain.setScaleNormalization(false);
 	boundingBox = meshBounds(terrain.getMesh(0));
@@ -214,32 +218,53 @@ void ofApp::setup(){
     // Sound effects load
     fire.load("sounds/qubodupFireLoop.ogg");
     descent.load("sounds/wind woosh loop.ogg");
+
+    startScreen.load("images/startScreen.png");
+    endScreen.load("images/endScreen.png");
     
     // Landing zones
-    zones.push_back(Landing(-14.0, 21.0, 5.47, 14.0));
-    zones.push_back(Landing(-22.8, -46.5, -29.5, -33.5));
-    zones.push_back(Landing(-38.6, 67.2, -71.1, 75.7));
+    zones.push_back(Landing(-5, 5, -70, -60));               // 10x10
+    zones.push_back(Landing(-75, -65, 60, 70));
+    zones.push_back(Landing(80, 90, 20, 30));
 
 }
 
 // load vertex buffer in preparation for rendering
 //
 void ofApp::loadVbo() {
-    if (exhaust.sys->particles.size() < 1) return;
-
-    vector<ofVec3f> sizes;
-    vector<ofVec3f> points;
-    for (int i = 0; i < exhaust.sys->particles.size(); i++) {
-        points.push_back(exhaust.sys->particles[i].position);
-        sizes.push_back(ofVec3f(5));
+    if (exhaust.sys->particles.size() < 1) {}
+    else {
+        vector<ofVec3f> sizes;
+        vector<ofVec3f> points;
+        for (int i = 0; i < exhaust.sys->particles.size(); i++) {
+            points.push_back(exhaust.sys->particles[i].position);
+            sizes.push_back(ofVec3f(5));
+        }
+        // upload the data to the vbo
+        //
+        vbo.clear();
+        int total = (int)points.size();
+        vbo.setVertexData(&points[0], total, GL_STATIC_DRAW);
+        vbo.setNormalData(&sizes[0], total, GL_STATIC_DRAW);
     }
-    // upload the data to the vbo
-    //
-    int total = (int)points.size();
-    vbo.clear();
-    vbo.setVertexData(&points[0], total, GL_STATIC_DRAW);
-    vbo.setNormalData(&sizes[0], total, GL_STATIC_DRAW);
+    if (explosion->sys->particles.size() < 1) {}
+    else {
+        //cout << "explosion system's particle size: " << explosion->sys->particles.size() << endl;
+        vector<ofVec3f> sizes;
+        vector<ofVec3f> points;
+        for (int i = 0; i < explosion->sys->particles.size(); i++) {
+            points.push_back(explosion->sys->particles[i].position);
+            sizes.push_back(ofVec3f(5));
+        }
+        // upload the data to the vbo
+        //
+        vbo1.clear();
+        int total = (int)points.size();
+        vbo1.setVertexData(&points[0], total, GL_STATIC_DRAW);
+        vbo1.setNormalData(&sizes[0], total, GL_STATIC_DRAW);
+    }
 }
+
 
 void ofApp::checkCollisions() {
     // only bother to check for descending particles.
@@ -269,7 +294,12 @@ void ofApp::update() {
 
     if (fuel <= 0)
     {
-        sys.addForce(new GravityForce(ofVec3f(0, -10, 0)));
+        deadForce->set(ofVec3f(0, -10, 0));
+    }
+
+    if (fuel <= -250)
+    {
+        gameDone = true;
     }
 
     //cout << "x: " << lander.getPosition().x << " z: "<< lander.getPosition().z << endl;
@@ -301,8 +331,21 @@ void ofApp::update() {
     points[3] = ofVec3f(max.x, min.y, max.z);
     
     // Camera updates
-    insideCam.setPosition(sys.particles[0].position + ((max - min)/2).y);
-    insideCam.lookAt(glm::vec3(heading.x * 100, sys.particles[0].position.y + ((max - min)/2).y, heading.z * 100));
+    insideCam.setPosition(sys.particles[0].position + ((max - min) / 2).y);
+    //insideCam.lookAt(glm::vec3(heading.x * 100, sys.particles[0].position.y + ((max - min)/2).y, heading.z * 100));
+
+    if (theCam == &insideCam) {
+        // Center of camera is at windowWidth/2 and windowHeight/2
+        if (mouseX > 550 && mouseX < 700 && mouseY > 300 && mouseY < 500) {
+            insideCam.lookAt(theCam->screenToWorld(glm::vec3(ofGetWindowWidth() / 2, ofGetWindowHeight() / 2, 0)));
+        }
+        else {
+            ofVec3f centerToMouse = ofVec3f(mouseX - ofGetWindowWidth() / 2, mouseY - ofGetWindowHeight() / 2, 0);     // Vector from center to mouse
+            centerToMouse = centerToMouse.getNormalized() * 4;          // Normalize and multiply by constant
+            insideCam.lookAt(theCam->screenToWorld(glm::vec3(ofGetWindowWidth() / 2 + centerToMouse.x, ofGetWindowHeight() / 2 + centerToMouse.y, 0)));
+        }
+    }
+    //cout << "(" << mouseX << ", " << mouseY << ")" << endl;
     viewCam.lookAt(sys.particles[0].position);
     
     
@@ -315,14 +358,19 @@ void ofApp::update() {
     altitude = lander.getPosition().y - topOfBox;
     
 
+
     // Tests for crashing
     hitBoxes.clear();
     for (int i = 0; i < points.size(); i++) {
-        TreeNode hitBox;            // Change so that size of box is small enough
+        TreeNode hitBox;
         //kdtree.pointIntersect(points[i], kdtree.root, hitBox);
         octree.pointIntersect(points[i], octree.root, hitBox);
         if (hitBox.points.size() != 0 && sys.particles[0].velocity.y < 0) {                // Checks if added TreeNode is not null
             hitBoxes.push_back(hitBox);
+            // DIAGNOSTIC LANDING ZONE
+//            if (zones[0].checkInside(lander.getPosition())) {
+//                cout << "YOU DID IT" << endl;
+//            }
             explosion->setPosition(lander.getPosition());
             explosion->start();
         }
@@ -338,14 +386,14 @@ void ofApp::update() {
         exhaust.setRate(100);
         if (!fire.isPlaying())
             fire.play();
-        fuel = fuel - 5;
+        fuel = fuel - 50;
     }
     if (bSKeyDown == true) {
         verticalThruster->set(-thrusterVerticalAcceleration);   // Negative vertical
         exhaust.setRate(100);
         if (!descent.isPlaying())
             descent.play();
-        fuel = fuel - 5;
+        fuel = fuel - 50;
     }
     if (bWKeyDown == false && bSKeyDown == false) {
         verticalThruster->set(ofVec3f(0, 0, 0));                // No acceleration
@@ -357,25 +405,25 @@ void ofApp::update() {
     if (bUpKeyDown == true) {
         xzThruster->set(ofVec3f(heading.x, 0, heading.z));      // Forward
         exhaust.setRate(100);
-        fuel = fuel - 5;
+        fuel = fuel - 50;
     }
     
     if (bDownKeyDown == true) {
         xzThruster->set(ofVec3f(-heading.x, 0, -heading.z));    // Backward
         exhaust.setRate(100);
-        fuel = fuel - 5;
+        fuel = fuel - 50;
     }
     
     if (bLeftKeyDown == true) {
         xzThruster->set(ofVec3f(heading.z, 0, -heading.x));     // Left
         exhaust.setRate(100);
-        fuel = fuel - 5;
+        fuel = fuel - 50;
     }
     
     if (bRightKeyDown == true) {
         xzThruster->set(ofVec3f(-heading.z, 0, heading.x));     // Right
         exhaust.setRate(100);
-        fuel = fuel - 5;
+        fuel = fuel - 50;
     }
     
     if (bUpKeyDown == false && bDownKeyDown == false && bLeftKeyDown == false && bRightKeyDown == false) {
@@ -385,7 +433,7 @@ void ofApp::update() {
     // Update particle systems/emitter
     //
     sys.update();
-    exhaust.setPosition(lander.getPosition() + ofVec3f(-.4, 4.5, 0));
+    exhaust.setPosition(lander.getPosition() + ofVec3f(-.4, 4.5, .08));
     exhaust.update();
     explosion->update();
     
@@ -462,7 +510,12 @@ void ofApp::draw(){
     
     // Draw particle systems/emitter
     sys.draw();
-    explosion->draw();
+
+    ofSetColor(ofColor::purple);
+    // Draw landing zones
+    for (int i = 0; i < zones.size(); i++) {
+        drawLanding(zones[i]);
+    }
 
     ofSetColor(255, 100, 90);
 
@@ -480,6 +533,9 @@ void ofApp::draw(){
     //
     particleTex.bind();
     vbo.draw(GL_POINTS, 0, (int)exhaust.sys->particles.size());
+    ofSetColor(81, 81, 16);
+    vbo1.draw(GL_POINTS, 0, (int)explosion->sys->particles.size());
+    ofSetColor(255, 100, 90);
     particleTex.unbind();
 
     //  end drawing in the camera
@@ -512,6 +568,15 @@ void ofApp::draw(){
     gui.draw();
     ofDrawBitmapString(altitude, ofPoint(10, 20));
     ofDrawBitmapString(fuel, ofPoint(30, 50));
+    if (!gameStart)	// Drawing the start screen
+    {
+        startScreen.draw(0, 0);
+    }
+    
+    if (gameDone)
+    {
+        endScreen.draw(0, 0);
+    }
 }
 
 // 
@@ -545,6 +610,9 @@ void ofApp::drawAxis(ofVec3f location) {
 void ofApp::keyPressed(int key) {
 
 	switch (key) {
+    case ' ':
+        gameStart = true;
+        break;
 	case 'C':
 	case 'c':
 		if (cam.getMouseInputEnabled()) cam.disableMouseInput();
@@ -555,8 +623,12 @@ void ofApp::keyPressed(int key) {
 		ofToggleFullscreen();
 		break;
 	case 'H':
-	case 'h':
-		break;
+    case 'h':
+        sys.particles[0].position = ofVec3f(0,0,0);
+        fuel = 50000;
+        deadForce->set(ofVec3f(0, 0, 0));
+        gameDone = false;
+        break;
 	case 'r':
 		cam.reset();
 		break;
@@ -670,6 +742,9 @@ void ofApp::keyReleased(int key) {
         break;
     case OF_KEY_RIGHT:   // move right
         bRightKeyDown = false;
+        break;
+    case 'h':
+        gameReset = false;
         break;
 	default:
 		break;
