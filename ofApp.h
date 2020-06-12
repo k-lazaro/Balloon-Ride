@@ -6,8 +6,10 @@
 #include "box.h"
 #include "ray.h"
 #include "KdTree.h"
+#include "Octree.h"
 #include "ParticleSystem.h"
 #include "ParticleEmitter.h"
+#include "landing.h"
 
 
 
@@ -93,12 +95,14 @@ class ofApp : public ofBaseApp{
 		const float selectionRange = 4.0;
     
         KdTree kdtree;
+        Octree octree;
         ofSpherePrimitive sphere;
     
     
         Particle physParticle;
         ParticleSystem sys;
         ParticleEmitter exhaust;
+        ParticleEmitter *explosion;                    // Starts whenever bullet collides with enemy
     
         ThrusterForce* verticalThruster;
         ThrusterForce* xzThruster;
@@ -110,5 +114,7 @@ class ofApp : public ofBaseApp{
         Ray sensor;
         TreeNode altitudeIntersect;
         float altitude;
+    
+        vector<Landing> zones;
 };
 

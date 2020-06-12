@@ -98,6 +98,13 @@ void ofApp::setup(){
     exhaust.setGroupSize(10);
     exhaust.particleColor = ofColor::yellow;
     exhaust.start();
+    
+    explosion = new ParticleEmitter(new ParticleSystem());
+    explosion->sys->addForce(new ImpulseRadialForce(100));
+    explosion->setOneShot(true);
+    explosion->fired = false;
+    explosion->setEmitterType(RadialEmitter);
+    explosion->setGroupSize(2);
 
 	theCam = &cam;
 
@@ -105,7 +112,7 @@ void ofApp::setup(){
 	//
 	initLightingAndMaterials();
 
-	terrain.loadModel("geo/canthisjustwork.obj");
+	terrain.loadModel("geo/one.obj");
     //terrain.loadModel("geo/mars-5k.obj");
 	terrain.setScaleNormalization(false);
 	boundingBox = meshBounds(terrain.getMesh(0));
@@ -118,7 +125,7 @@ void ofApp::setup(){
     
     // load lander model
     //
-    if (lander.loadModel("geo/lander.obj")) {
+    if (lander.loadModel("geo/texturedBalloon.obj")) {
         lander.setScaleNormalization(false);
         //lander.setScale(.5, .5, .5);
         //    lander.setRotation(0, -180, 1, 0, 0);
@@ -127,7 +134,7 @@ void ofApp::setup(){
         bLanderLoaded = true;
     }
     else {
-        cout << "Error: Can't load model" << "geo/lander.obj" << endl;
+        cout << "Error: Can't load model" << "geo/texturedBalloon.obj" << endl;
         ofExit(0);
     }
     ofVec3f min = lander.getSceneMin() + lander.getPosition();
@@ -140,8 +147,10 @@ void ofApp::setup(){
     
     
     // create KdTree for terrain
-    kdtree.create(terrain.getMesh(0), 40);                      // 40 Levels for moon, 20 for mars
+    //kdtree.create(terrain.getMesh(0), 40);                      // 40 Levels for moon, 20 for mars
 
+    // create Octree
+    octree.create(terrain.getMesh(0), 7);
     
     // gui setup
     gui.setup();
@@ -151,11 +160,16 @@ void ofApp::setup(){
     sphere.setRadius(7.0);                                      // 7 for Moon
     //sphere.setRadius(.3);                                         // .3 for Mars
     
+    // Background load
     sky.load("images/tilesetOpenGameBackground.png");
     sky.resize(ofGetWindowWidth(), ofGetWindowHeight());
     
+    // Sound effects load
     fire.load("sounds/qubodupFireLoop.ogg");
     descent.load("sounds/wind woosh loop.ogg");
+    
+    // Landing zones
+    zones.push_back(Landing(-14.0, 21.0, 5.47, 14.0));
 }
 
 void ofApp::checkCollisions() {
@@ -192,6 +206,7 @@ void ofApp::update() {
     }
     lander.setRotation(0, angle, 0, 1, 0);
     lander.setPosition(sys.particles[0].position.x, sys.particles[0].position.y, sys.particles[0].position.z);          // Set position to follow particle
+    
 
     
     // Updates bottom contact points
@@ -203,15 +218,16 @@ void ofApp::update() {
     points[3] = ofVec3f(max.x, min.y, max.z);
     
     // Camera updates
-    insideCam.setPosition(sys.particles[0].position * 1.5);
-    insideCam.lookAt(glm::vec3(heading.x * 100, sys.particles[0].position.y * 1.5, heading.z * 100));
+    insideCam.setPosition(sys.particles[0].position + ((max - min)/2).y);
+    insideCam.lookAt(glm::vec3(heading.x * 100, sys.particles[0].position.y + ((max - min)/2).y, heading.z * 100));
     viewCam.lookAt(sys.particles[0].position);
     
     
     // Altitude checking
     //sensor = Ray(Vector3(lander.getPosition().x, lander.getPosition().y, lander.getPosition().z), Vector3(0, -100, 0));
     sensor = Ray(Vector3((max.x - min.x)/2 + min.x, min.y, (max.z - min.z)/2 + min.z), Vector3(0, -100, 0));
-    kdtree.intersect(sensor, kdtree.root, altitudeIntersect);
+    //kdtree.intersect(sensor, kdtree.root, altitudeIntersect);
+    octree.intersect(sensor, octree.root, altitudeIntersect);
     float topOfBox = altitudeIntersect.box.max().y();
     altitude = lander.getPosition().y - topOfBox;
     
@@ -220,9 +236,12 @@ void ofApp::update() {
     hitBoxes.clear();
     for (int i = 0; i < points.size(); i++) {
         TreeNode hitBox;            // Change so that size of box is small enough
-        kdtree.pointIntersect(points[i], kdtree.root, hitBox);
+        //kdtree.pointIntersect(points[i], kdtree.root, hitBox);
+        octree.pointIntersect(points[i], octree.root, hitBox);
         if (hitBox.points.size() != 0 && sys.particles[0].velocity.y < 0) {                // Checks if added TreeNode is not null
             hitBoxes.push_back(hitBox);
+            explosion->setPosition(lander.getPosition());
+            explosion->start();
         }
     }
     
@@ -279,6 +298,7 @@ void ofApp::update() {
     sys.update();
     exhaust.setPosition(lander.getPosition());
     exhaust.update();
+    explosion->update();
     
     // Pop the impulse forces
     if (hitBoxes.size() != 0) {
@@ -347,12 +367,14 @@ void ofApp::draw(){
 
     
     // Draws from 0 to levels, used in final implementation
-    kdtree.draw(kdtree.root, levels, 0);
+    //kdtree.draw(kdtree.root, levels, 0);
+    octree.draw(octree.root, levels, 0);
     
     
     // Draw particle systems/emitter
     sys.draw();
     exhaust.draw();
+    explosion->draw();
     
     // Draw bottom contact points
     ofSetColor(ofColor::red);
